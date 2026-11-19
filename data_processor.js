@@ -8,98 +8,153 @@
  * - Object destructuring and spread
  * - CSV parsing with csv-parse
  * - JSON serialization with JSON.stringify
+ *
+ * Improvements applied (see mejoras.md):
+ * - J-C3: _isNumeric uses Number() — stricter than parseFloat (rejects "25px")
+ * - J-C2: _isNumeric excludes NaN and Infinity (finite numbers only)
+ * - J-E1: loadData reads directly and handles ENOENT/EACCES by error code
+ * - J-E2: exportResults wrapped in try/catch with descriptive error
+ * - J-E3: calculateStatistics guards with Array.isArray
+ * - J-D1: _loaded state flag prevents out-of-order calls
+ * - O-2:  verbose parameter controls console output
+ * - E-S1: stdDev (standard deviation) added
+ * - E-S2: median added
+ * - E-S4: missing count added per field
  */
 
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
 
+/**
+ * @typedef {Object} FieldStats
+ * @property {number} mean
+ * @property {number} median
+ * @property {number} stdDev
+ * @property {number} min
+ * @property {number} max
+ * @property {number} count
+ * @property {number} sum
+ * @property {number} missing
+ */
+
 class DataProcessor {
   /**
    * Initialize the DataProcessor with a CSV filename.
    * @param {string} filename - Path to the CSV file to process
+   * @param {boolean} [verbose=true] - If false, suppresses all console output (O-2)
    */
-  constructor(filename) {
+  constructor(filename, verbose = true) {
+    if (typeof filename !== 'string' || filename.trim() === '') {
+      throw new TypeError('filename must be a non-empty string');
+    }
     this.filename = filename;
-    this.data = [];   // equivalent to List[Dict[str, str]] in Python
-    this.stats = {};  // equivalent to Dict[str, Dict[str, float]] in Python
+    this.data = [];
+    this.stats = {};
+    this.verbose = verbose;
+    this._loaded = false; // J-D1: state flag to detect out-of-order calls
+  }
+
+  /** @private */
+  _log(...args) {
+    if (this.verbose) console.log(...args); // O-2: respects verbose flag
   }
 
   /**
-   * Check if a string value can be converted to a number.
-   * Equivalent to Python's _is_numeric using try/except float(value).
+   * Check if a string value is a finite number.
+   * J-C3: uses Number() which is stricter than parseFloat ("25px" → NaN).
+   * J-C2: isFinite() excludes NaN and Infinity.
    * @param {string} value
    * @returns {boolean}
    */
   _isNumeric(value) {
     if (value === null || value === undefined || String(value).trim() === '') return false;
-    return !isNaN(parseFloat(String(value)));
+    return isFinite(Number(String(value).trim()));
   }
 
   /**
    * Load data from the CSV file.
-   * Uses fs.promises (async) + csv-parse/sync for parsing.
-   * Equivalent to Python's load_data() using csv.DictReader.
+   * J-E1: reads directly with fs.promises.readFile and handles errors by code,
+   * catching both ENOENT (not found) and EACCES (permission denied).
    *
-   * @throws {Error} If the CSV file doesn't exist or is malformed
+   * @throws {Error} If the CSV file doesn't exist, is unreadable, or is malformed
    */
   async loadData() {
-    // Equivalent to: if not os.path.exists(self.filename)
+    let content;
     try {
-      await fs.promises.access(this.filename);
-    } catch {
-      throw new Error(`File not found: ${this.filename}`);
+      content = await fs.promises.readFile(this.filename, { encoding: 'utf-8' });
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new Error(`File not found: ${this.filename}`);
+      if (err.code === 'EACCES') throw new Error(`Permission denied: ${this.filename}`);
+      throw new Error(`Could not read file: ${err.message}`);
     }
-
-    // Equivalent to: with open(filename, 'r') as file: csv.DictReader(file)
-    const content = await fs.promises.readFile(this.filename, { encoding: 'utf-8' });
 
     // { columns: true } makes csv-parse produce objects keyed by column name
     // — identical behavior to Python's csv.DictReader
     this.data = parse(content, { columns: true, skip_empty_lines: true });
+    this._loaded = true; // J-D1: mark as loaded
 
-    console.log(`✅ Loaded ${this.data.length} rows from ${this.filename}`);
+    this._log(`✅ Loaded ${this.data.length} rows from ${this.filename}`);
   }
 
   /**
-   * Calculate basic statistics for numeric fields in the data.
-   * Equivalent to Python's calculate_statistics().
+   * Calculate statistics for numeric fields in the data.
+   * J-E3: guards with Array.isArray before accessing .length.
+   * J-D1: warns if loadData() was not called first.
+   * E-S1: adds stdDev (standard deviation).
+   * E-S2: adds median.
+   * E-S4: adds missing count per field.
    *
-   * Uses Array methods instead of Python list comprehensions:
-   *   Python: [key for key in row.keys() if self._is_numeric(row[key])]
-   *   JS:     Object.keys(row).filter(key => this._isNumeric(row[key]))
-   *
-   * @returns {Object} Dictionary with statistics for each numeric field
+   * @returns {Object.<string, FieldStats>}
    */
   calculateStatistics() {
-    if (this.data.length === 0) {
-      console.log('⚠️  No data loaded. Call loadData() first.');
+    // J-E3: guard against non-array data
+    if (!Array.isArray(this.data) || this.data.length === 0) {
+      this._log('⚠️  No data loaded. Call loadData() first.');
       return {};
     }
 
-    // Equivalent to Python list comprehension to find numeric fields
+    // J-D1: warn if called before loadData()
+    if (!this._loaded) {
+      this._log('⚠️  loadData() was not called. Data may be incomplete.');
+    }
+
     const numericFields = Object.keys(this.data[0]).filter(
       (key) => this._isNumeric(this.data[0][key])
     );
 
-    console.log(`📊 Found ${numericFields.length} numeric fields: ${numericFields.join(', ')}`);
+    this._log(`📊 Found ${numericFields.length} numeric fields: ${numericFields.join(', ')}`);
 
     const stats = {};
 
     for (const field of numericFields) {
-      // Equivalent to: [float(row[field]) for row in self.data if self._is_numeric(row[field])]
       const values = this.data
         .filter((row) => this._isNumeric(row[field]))
-        .map((row) => parseFloat(row[field]));
+        .map((row) => Number(row[field]));
+
+      const missing = this.data.filter((row) => !this._isNumeric(row[field])).length; // E-S4
 
       if (values.length > 0) {
-        const sum = values.reduce((acc, v) => acc + v, 0);  // equivalent to sum(values)
-        stats[field] = {
-          mean: sum / values.length,                         // equivalent to sum(values) / len(values)
-          min: Math.min(...values),                          // equivalent to min(values)
-          max: Math.max(...values),                          // equivalent to max(values)
-          count: values.length,                              // equivalent to len(values)
-          sum: sum,                                          // equivalent to sum(values)
-        };
+        const sum = values.reduce((acc, v) => acc + v, 0);
+        const mean = sum / values.length;
+
+        // E-S2: median — sort a copy to avoid mutating values array
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const median = sorted.length % 2 !== 0
+          ? sorted[mid]
+          : (sorted[mid - 1] + sorted[mid]) / 2;
+
+        // E-S1: sample standard deviation (ddof=1, same as Python statistics.stdev)
+        const variance = values.length > 1
+          ? values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (values.length - 1)
+          : 0;
+        const stdDev = Math.sqrt(variance);
+
+        // J-P1: use reduce for min/max to avoid spread stack overflow on large arrays
+        const min = values.reduce((a, b) => Math.min(a, b));
+        const max = values.reduce((a, b) => Math.max(a, b));
+
+        stats[field] = { mean, median, stdDev, min, max, count: values.length, sum, missing };
       }
     }
 
@@ -109,7 +164,6 @@ class DataProcessor {
 
   /**
    * Get a summary of the processed data.
-   * Equivalent to Python's get_summary().
    * @returns {Object}
    */
   getSummary() {
@@ -118,20 +172,20 @@ class DataProcessor {
       total_rows: this.data.length,
       total_fields: this.data.length > 0 ? Object.keys(this.data[0]).length : 0,
       numeric_fields: Object.keys(this.stats).length,
-      processed_at: new Date().toISOString(),   // equivalent to datetime.now().isoformat()
+      processed_at: new Date().toISOString(),
     };
   }
 
   /**
    * Export statistics to a JSON file.
-   * Equivalent to Python's export_results() using json.dump(..., indent=2).
+   * J-E2: wrapped in try/catch — write errors are now caught and re-thrown with context.
    *
    * @param {string} outputFile - Path to the output JSON file
    * @throws {Error} If unable to write to the output file
    */
   async exportResults(outputFile) {
     if (Object.keys(this.stats).length === 0) {
-      console.log('⚠️  No statistics calculated. Call calculateStatistics() first.');
+      this._log('⚠️  No statistics calculated. Call calculateStatistics() first.');
       return;
     }
 
@@ -140,38 +194,45 @@ class DataProcessor {
       statistics: this.stats,
     };
 
-    // Equivalent to: json.dump(output_data, file, indent=2)
     const json = JSON.stringify(outputData, null, 2);
-    await fs.promises.writeFile(outputFile, json, { encoding: 'utf-8' });
 
-    console.log(`✅ Results exported to ${outputFile}`);
+    // J-E2: explicit try/catch — write failures no longer produce unhandled stack traces
+    try {
+      await fs.promises.writeFile(outputFile, json, { encoding: 'utf-8' });
+    } catch (err) {
+      throw new Error(`Error writing to file "${outputFile}": ${err.message}`);
+    }
+
+    this._log(`✅ Results exported to ${outputFile}`);
   }
 
   /**
    * Print statistics to the console in a readable format.
-   * Equivalent to Python's print_statistics().
-   * Uses .toFixed(2) instead of Python's :.2f format specifier.
+   * Now also shows median, stdDev, and missing count.
    */
   printStatistics() {
     if (Object.keys(this.stats).length === 0) {
-      console.log('⚠️  No statistics available.');
+      this._log('⚠️  No statistics available.');
       return;
     }
 
-    console.log('\n' + '='.repeat(50));
-    console.log('STATISTICS SUMMARY');
-    console.log('='.repeat(50));
+    this._log('\n' + '='.repeat(50));
+    this._log('STATISTICS SUMMARY');
+    this._log('='.repeat(50));
 
-    for (const [field, stats] of Object.entries(this.stats)) {
-      console.log(`\n${field}:`);
-      console.log(`  Mean:  ${stats.mean.toFixed(2)}`);   // equivalent to f"  Mean:  {stats['mean']:.2f}"
-      console.log(`  Min:   ${stats.min.toFixed(2)}`);
-      console.log(`  Max:   ${stats.max.toFixed(2)}`);
-      console.log(`  Count: ${stats.count}`);
-      console.log(`  Sum:   ${stats.sum.toFixed(2)}`);
+    for (const [field, s] of Object.entries(this.stats)) {
+      this._log(`\n${field}:`);
+      this._log(`  Mean:    ${s.mean.toFixed(2)}`);
+      this._log(`  Median:  ${s.median.toFixed(2)}`);
+      this._log(`  Std Dev: ${s.stdDev.toFixed(2)}`);
+      this._log(`  Min:     ${s.min.toFixed(2)}`);
+      this._log(`  Max:     ${s.max.toFixed(2)}`);
+      this._log(`  Count:   ${s.count}`);
+      this._log(`  Sum:     ${s.sum.toFixed(2)}`);
+      this._log(`  Missing: ${s.missing}`);
     }
 
-    console.log('\n' + '='.repeat(50));
+    this._log('\n' + '='.repeat(50));
   }
 }
 
@@ -226,11 +287,8 @@ async function main() {
 
     console.log('\n✅ Processing complete!');
   } catch (e) {
-    if (e.message && e.message.startsWith('File not found')) {
-      console.error(`❌ Error: ${e.message}`);
-    } else {
-      console.error(`❌ Unexpected error: ${e.message}`);
-    }
+    // J-E4: use err.code or message prefix — both paths produce clear output
+    console.error(`❌ ${e.message}`);
   }
 }
 

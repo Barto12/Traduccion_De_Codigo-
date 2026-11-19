@@ -307,10 +307,13 @@
             <div class="field-name">${field}</div>
             <table>
               <tr><td>Media</td><td>${s.mean.toFixed(2)}</td></tr>
+              <tr><td>Mediana</td><td>${s.median.toFixed(2)}</td></tr>
+              <tr><td>Desv. estándar</td><td>${s.stdDev.toFixed(2)}</td></tr>
               <tr><td>Mínimo</td><td>${s.min.toFixed(2)}</td></tr>
               <tr><td>Máximo</td><td>${s.max.toFixed(2)}</td></tr>
               <tr><td>Suma</td><td>${s.sum.toFixed(2)}</td></tr>
               <tr><td>Conteo</td><td>${s.count}</td></tr>
+              <tr><td>Faltantes</td><td>${s.missing}</td></tr>
             </table>
           </div>
         `).join('');
