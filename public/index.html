@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Processor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      background: #f7f8fa;
+      color: #1f2328;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 { font-size: 1.75rem; font-weight: 700; }
+    header p  { color: #57606a; margin-top: 0.4rem; font-size: 0.95rem; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1.2rem;
+      color: #57606a;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Drop zone ── */
+    .drop-zone {
+      border: 2px dashed #d1d5db;
+      border-radius: 8px;
+      padding: 2.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: #3b82d4;
+      background: #eff6ff;
+    }
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .drop-zone .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .drop-zone .label { font-size: 1rem; color: #374151; }
+    .drop-zone .sublabel { font-size: 0.82rem; color: #9ca3af; margin-top: 0.3rem; }
+    .drop-zone .filename {
+      margin-top: 0.75rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #3b82d4;
+    }
+
+    .btn {
+      display: inline-block;
+      margin-top: 1.2rem;
+      padding: 0.6rem 1.6rem;
+      background: #3b82d4;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #2563ab; }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    /* ── Status ── */
+    #status {
+      font-size: 0.9rem;
+      margin-top: 0.75rem;
+      min-height: 1.2em;
+    }
+    #status.error { color: #dc2626; }
+    #status.ok    { color: #16a34a; }
+
+    /* ── Summary ── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+    }
+    .summary-item {
+      background: #f7f8fa;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .summary-item .val {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #3b82d4;
+    }
+    .summary-item .lbl {
+      font-size: 0.78rem;
+      color: #57606a;
+      margin-top: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Stats table ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 540px) { .stats-grid { grid-template-columns: 1fr; } }
+
+    .field-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .field-card .field-name {
+      background: #1f2328;
+      color: #fff;
+      padding: 0.5rem 1rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .field-card table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    .field-card td {
+      padding: 0.45rem 1rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .field-card tr:last-child td { border-bottom: none; }
+    .field-card td:first-child { color: #57606a; }
+    .field-card td:last-child  { font-weight: 600; text-align: right; }
+
+    /* ── Hidden ── */
+    .hidden { display: none; }
+
+    footer {
+      margin-top: auto;
+      padding-top: 2rem;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+      width: 100%;
+      max-width: 760px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>📊 Data Processor</h1>
+    <p>Sube un archivo CSV y obtén estadísticas al instante</p>
+  </header>
+
+  <!-- Upload card -->
+  <div class="card">
+    <h2>Archivo CSV</h2>
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".csv,text/csv" />
+      <div class="icon">📂</div>
+      <div class="label">Arrastra tu CSV aquí o haz clic para elegir</div>
+      <div class="sublabel">Máximo 5 MB · solo archivos .csv</div>
+      <div class="filename hidden" id="chosenFile"></div>
+    </div>
+    <div style="text-align:center;">
+      <button class="btn" id="processBtn" disabled>Procesar</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <!-- Summary card (hidden until results arrive) -->
+  <div class="card hidden" id="summaryCard">
+    <h2>Resumen</h2>
+    <div class="summary-grid" id="summaryGrid"></div>
+  </div>
+
+  <!-- Statistics card -->
+  <div class="card hidden" id="statsCard">
+    <h2>Estadísticas por campo</h2>
+    <div class="stats-grid" id="statsGrid"></div>
+  </div>
+
+  <footer>Made with IBM Bob</footer>
+
+  <script>
+    const dropZone   = document.getElementById('dropZone');
+    const fileInput  = document.getElementById('fileInput');
+    const chosenFile = document.getElementById('chosenFile');
+    const processBtn = document.getElementById('processBtn');
+    const statusEl   = document.getElementById('status');
+    const summaryCard = document.getElementById('summaryCard');
+    const summaryGrid = document.getElementById('summaryGrid');
+    const statsCard  = document.getElementById('statsCard');
+    const statsGrid  = document.getElementById('statsGrid');
+
+    let selectedFile = null;
+
+    // Drag-and-drop visual feedback
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) setFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) setFile(fileInput.files[0]);
+    });
+
+    function setFile(file) {
+      selectedFile = file;
+      chosenFile.textContent = `📄 ${file.name}  (${(file.size / 1024).toFixed(1)} KB)`;
+      chosenFile.classList.remove('hidden');
+      processBtn.disabled = false;
+      statusEl.textContent = '';
+      statusEl.className = '';
+      summaryCard.classList.add('hidden');
+      statsCard.classList.add('hidden');
+    }
+
+    processBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      processBtn.disabled = true;
+      statusEl.className = '';
+      statusEl.textContent = '⏳ Procesando...';
+
+      const formData = new FormData();
+      formData.append('csvfile', selectedFile);
+
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok) {
+          statusEl.textContent = `❌ Error: ${data.error}`;
+          statusEl.className = 'error';
+          processBtn.disabled = false;
+          return;
+        }
+
+        renderResults(data);
+        statusEl.textContent = '✅ Procesado correctamente';
+        statusEl.className = 'ok';
+      } catch (err) {
+        statusEl.textContent = `❌ Error de red: ${err.message}`;
+        statusEl.className = 'error';
+      } finally {
+        processBtn.disabled = false;
+      }
+    });
+
+    function renderResults({ summary, statistics }) {
+      // Summary tiles
+      const summaryItems = [
+        { val: summary.total_rows,     lbl: 'Filas' },
+        { val: summary.total_fields,   lbl: 'Campos' },
+        { val: summary.numeric_fields, lbl: 'Campos numéricos' },
+        { val: summary.filename,       lbl: 'Archivo' },
+      ];
+      summaryGrid.innerHTML = summaryItems.map(({ val, lbl }) => `
+        <div class="summary-item">
+          <div class="val">${val}</div>
+          <div class="lbl">${lbl}</div>
+        </div>
+      `).join('');
+      summaryCard.classList.remove('hidden');
+
+      // Field statistics
+      const fields = Object.entries(statistics);
+      if (fields.length === 0) {
+        statsGrid.innerHTML = '<p style="color:#57606a">No se encontraron campos numéricos.</p>';
+      } else {
+        statsGrid.innerHTML = fields.map(([field, s]) => `
+          <div class="field-card">
+            <div class="field-name">${field}</div>
+            <table>
+              <tr><td>Media</td><td>${s.mean.toFixed(2)}</td></tr>
+              <tr><td>Mínimo</td><td>${s.min.toFixed(2)}</td></tr>
+              <tr><td>Máximo</td><td>${s.max.toFixed(2)}</td></tr>
+              <tr><td>Suma</td><td>${s.sum.toFixed(2)}</td></tr>
+              <tr><td>Conteo</td><td>${s.count}</td></tr>
+            </table>
+          </div>
+        `).join('');
+      }
+      statsCard.classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>

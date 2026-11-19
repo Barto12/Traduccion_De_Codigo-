@@ -1,0 +1,16 @@
+{
+  "name": "data-processor",
+  "version": "1.0.0",
+  "description": "Data processor that analyzes CSV files and generates statistics - JS translation of data_processor.py",
+  "main": "data_processor.js",
+  "type": "module",
+  "scripts": {
+    "start": "node data_processor.js",
+    "server": "node server.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.0.0",
+    "express": "^4.18.2",
+    "multer": "^2.0.0"
+  }
+}
