@@ -17,7 +17,7 @@
  * - J-E3: calculateStatistics guards with Array.isArray
  * - J-D1: _loaded state flag prevents out-of-order calls
  * - O-2:  verbose parameter controls console output
- * - E-S1: stdDev (standard deviation) added
+ * - E-S1: std_dev (standard deviation) added
  * - E-S2: median added
  * - E-S4: missing count added per field
  */
@@ -29,7 +29,7 @@ import fs from 'fs';
  * @typedef {Object} FieldStats
  * @property {number} mean
  * @property {number} median
- * @property {number} stdDev
+ * @property {number} std_dev
  * @property {number} min
  * @property {number} max
  * @property {number} count
@@ -100,7 +100,7 @@ class DataProcessor {
    * Calculate statistics for numeric fields in the data.
    * J-E3: guards with Array.isArray before accessing .length.
    * J-D1: warns if loadData() was not called first.
-   * E-S1: adds stdDev (standard deviation).
+   * E-S1: adds std_dev (standard deviation).
    * E-S2: adds median.
    * E-S4: adds missing count per field.
    *
@@ -148,13 +148,13 @@ class DataProcessor {
         const variance = values.length > 1
           ? values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (values.length - 1)
           : 0;
-        const stdDev = Math.sqrt(variance);
+        const std_dev = Math.sqrt(variance);
 
         // J-P1: use reduce for min/max to avoid spread stack overflow on large arrays
         const min = values.reduce((a, b) => Math.min(a, b));
         const max = values.reduce((a, b) => Math.max(a, b));
 
-        stats[field] = { mean, median, stdDev, min, max, count: values.length, sum, missing };
+        stats[field] = { mean, median, std_dev, min, max, count: values.length, sum, missing };
       }
     }
 
@@ -208,7 +208,7 @@ class DataProcessor {
 
   /**
    * Print statistics to the console in a readable format.
-   * Now also shows median, stdDev, and missing count.
+   * Now also shows median, std_dev, and missing count.
    */
   printStatistics() {
     if (Object.keys(this.stats).length === 0) {
@@ -224,7 +224,7 @@ class DataProcessor {
       this._log(`\n${field}:`);
       this._log(`  Mean:    ${s.mean.toFixed(2)}`);
       this._log(`  Median:  ${s.median.toFixed(2)}`);
-      this._log(`  Std Dev: ${s.stdDev.toFixed(2)}`);
+      this._log(`  Std Dev: ${s.std_dev.toFixed(2)}`);
       this._log(`  Min:     ${s.min.toFixed(2)}`);
       this._log(`  Max:     ${s.max.toFixed(2)}`);
       this._log(`  Count:   ${s.count}`);

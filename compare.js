@@ -83,7 +83,7 @@ for (const field of pyFields) {
   }
 
   // JS-only fields (no Python equivalent) — just report them
-  const jsOnlyKeys = ['median', 'stdDev', 'missing'];
+  const jsOnlyKeys = ['median', 'std_dev', 'missing'];
   for (const key of jsOnlyKeys) {
     if (j[key] !== undefined) {
       console.log(`  ℹ️  ${key} (JS only): ${j[key].toFixed ? j[key].toFixed(4) : j[key]}`);
