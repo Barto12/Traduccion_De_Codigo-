@@ -77,6 +77,11 @@ app.use((err, _req, res, _next) => {
   res.status(400).json({ error: err.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+// Export app for testing (supertest), only start the server when run directly
+export { app };
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
+  });
+}
